@@ -357,7 +357,7 @@ const SCENE_AWARENESS = 1;   // 自我覺察
 const SCENE_BREATH = 2;      // 自我調節 (深呼吸)
 const SCENE_DECISION = 3;    // 抉擇行動
 const SCENE_FEEDBACK = 4;    // 回饋與解鎖
-const SCENE_ALREADY_DONE = 5;// 今日已完成打卡（備用）
+const SCENE_ALREADY_DONE = 5;// 今日已完成打卡
 const SCENE_BADGE_WALL = 6;  // 徽章圖鑑牆
 const SCENE_CONGRATS = 7;    // 全通關大獎牌畫面
 
@@ -391,7 +391,7 @@ let congratsImgUrl = "";
 // 慶祝紙花粒子系統
 let confetti = [];
 
-// 🌟 金牌中心插圖（請在此填入圖片網址）
+// 🌟 金牌中心插圖
 let medalCenterImg = null;
 let medalCenterImgUrl = "https://i.postimg.cc/hGfMJppk/24.png";
 
@@ -422,14 +422,11 @@ function saveUnlockedBadge(badgeName) {
 
 // 支援非同步圖片載入
 async function setup() {
-  // 💡 強制清除阻擋標記，確保隨時可測試
-  localStorage.removeItem("sel_last_date");
-
   mainCanvas = createCanvas(640, 550);
   textAlign(CENTER, CENTER);
   rectMode(CORNER);
 
-  // 💡 畫布圓角與精緻陰影
+  // 畫布圓角與陰影
   mainCanvas.style("border-radius", "20px");
   mainCanvas.style("box-shadow", "0 10px 30px rgba(0, 0, 0, 0.12)");
   mainCanvas.style("overflow", "hidden");
@@ -478,7 +475,7 @@ async function setup() {
     try { congratsImg = await loadImage(congratsImgUrl); } catch (err) { congratsImg = null; }
   }
 
-  // 載入 15 題的徽章與 4 張專屬卡牌圖片
+  // 載入 15 題的徽章與卡牌圖片
   for (let i = 0; i < questionDatabase.length; i++) {
     let q = questionDatabase[i];
 
@@ -506,11 +503,20 @@ async function setup() {
   checkDailyProgress();
 }
 
+// 💡 恢復時間限制判定
 function checkDailyProgress() {
+  let today = getTodayDateString();
+  let lastDate = localStorage.getItem("sel_last_date");
   let nextQId = parseInt(localStorage.getItem("sel_next_qid") || "1");
+
   currentQuestionIndex = (nextQId - 1) % questionDatabase.length;
-  // 🔓 暫時關閉時間限制：重整直接進入主畫面
-  currentScene = SCENE_START;
+
+  // 如果今天已經作答過，直接跳轉到今日已完成畫面
+  if (lastDate === today) {
+    currentScene = SCENE_ALREADY_DONE;
+  } else {
+    currentScene = SCENE_START;
+  }
 }
 
 function draw() {
@@ -561,7 +567,7 @@ function draw() {
 // ---------------- 0. 主選單畫面 ----------------
 function drawStartScreen() {
   fill(239, 177, 135, 100);
-  rect(0, 0, width, 160,20);
+  rect(0, 0, width, 160, 20);
   
   fill(0);
   textSize(28);
@@ -859,13 +865,20 @@ function drawBadgeWallScreen() {
     pop();
   }
 
-  // 💡 底部按鈕顯示邏輯
+  // 💡 底部按鈕顯示邏輯（恢復每日打卡狀態判定）
+  let today = getTodayDateString();
+  let hasDoneToday = localStorage.getItem("sel_last_date") === today;
+
   if (unlocked.length >= questionDatabase.length) {
     drawAutoButton(width / 2 - 210, 445, 190, 42, "返回主畫面", color(193, 209, 196));
     drawAutoButton(width / 2 + 20, 445, 190, 42, "觀看結業大獎牌", color(255, 215, 0));
+  } else if (hasDoneToday) {
+    // 今日已完成：鎖定按鈕，顯示明日目標
+    drawAutoButton(width / 2 - 210, 445, 190, 42, "返回主畫面", color(193, 209, 196));
+    drawAutoButton(width / 2 + 20, 445, 190, 42, "明日目標：第 " + ((currentQuestionIndex % questionDatabase.length) + 1) + " 題 🔒", color(210, 210, 210));
   } else {
     drawAutoButton(width / 2 - 210, 445, 190, 42, "返回主畫面", color(193, 209, 196));
-    drawAutoButton(width / 2 + 20, 445, 190, 42, "繼續下一題 ➜", color(244, 217, 126));
+    drawAutoButton(width / 2 + 20, 445, 190, 42, "繼續今日試煉 ➜", color(244, 217, 126));
   }
 }
 
@@ -922,15 +935,13 @@ function drawCongratsScreen() {
     strokeWeight(4);
     circle(0, 0, 110);
 
-    // 金牌內圈
     fill(255, 225, 90);
     stroke(230, 175, 40);
     strokeWeight(2);
     circle(0, 0, 88);
 
-    // 💡 獎章中心：改為自訂圖片
     if (medalCenterImg) {
-      let maxImgBox = 70; // 圖片在金牌中央的最大尺寸
+      let maxImgBox = 70;
       let scaleVal = min(maxImgBox / medalCenterImg.width, maxImgBox / medalCenterImg.height);
       let drawW = medalCenterImg.width * scaleVal;
       let drawH = medalCenterImg.height * scaleVal;
@@ -939,14 +950,12 @@ function drawCongratsScreen() {
       image(medalCenterImg, 0, -8, drawW, drawH);
       imageMode(CORNER);
     } else {
-      // 沒放圖片時的預設皇冠
       noStroke();
       fill(175, 95, 0);
       textSize(34);
       text("👑", 0, -8);
     }
 
-    // 底部文字標籤
     noStroke();
     fill(175, 95, 0);
     textSize(13);
@@ -1182,7 +1191,8 @@ function mousePressed() {
       };
       saveRecordToFirebase(logData);
 
-      // 儲存下一題題號
+      // 💡 恢復時間限制：記錄今天已完成作答，並推進下一題題號
+      localStorage.setItem("sel_last_date", todayStr);
       localStorage.setItem("sel_next_qid", String(q.id + 1));
       currentScene = SCENE_FEEDBACK;
     }
@@ -1207,18 +1217,20 @@ function mousePressed() {
   // 6. 徽章圖鑑牆
   else if (currentScene === SCENE_BADGE_WALL) {
     let unlocked = getUnlockedBadges();
+    let today = getTodayDateString();
+    let hasDoneToday = localStorage.getItem("sel_last_date") === today;
 
     // 點擊「返回主畫面」 (X: 110 ~ 300, Y: 435 ~ 515)
     if (mouseX >= width / 2 - 210 && mouseX <= width / 2 - 20 && mouseY >= 435 && mouseY <= 515) {
-      currentScene = SCENE_START;
+      currentScene = hasDoneToday ? SCENE_ALREADY_DONE : SCENE_START;
     }
 
     // 點擊右側按鈕 (X: 340 ~ 530, Y: 435 ~ 515)
     if (mouseX >= width / 2 + 20 && mouseX <= width / 2 + 210 && mouseY >= 435 && mouseY <= 515) {
       if (unlocked.length >= questionDatabase.length) {
-        currentScene = SCENE_CONGRATS; // 滿 15 題看大獎牌
-      } else {
-        // 💡 直接讀取下一題題號進入自我覺察
+        currentScene = SCENE_CONGRATS; // 滿 15 題觀看大獎牌
+      } else if (!hasDoneToday) {
+        // 💡 只有當天尚未作答時才允許進入題目
         let nextQId = parseInt(localStorage.getItem("sel_next_qid") || "1");
         currentQuestionIndex = (nextQId - 1) % questionDatabase.length;
         currentScene = SCENE_AWARENESS;
