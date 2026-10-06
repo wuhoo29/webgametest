@@ -370,9 +370,9 @@ let lastChoiceWasGood = false;
 let studentName = "";
 let nameInput;
 let showNameWarning = false;
-let currentUserBadges = [];       // 💡 當前學生的徽章清單（由 Firebase 載入）
-let studentHasDoneToday = false;  // 💡 當前學生今天是否已完成過題目
-let isLoadingCloud = false;       // 💡 雲端載入中的讀取狀態
+let currentUserBadges = [];       
+let studentHasDoneToday = false;  
+let isLoadingCloud = false;       
 
 // 答題紀錄暫存
 let userAwareness = "";
@@ -387,14 +387,14 @@ let counted = false;
 let breathImg = null;
 let breathImgUrl = "https://i.postimg.cc/KjCnGHLw/04-1-1x1.png";
 
-// 🌟 全通關大圖示
+// 全通關大圖示
 let congratsImg = null;
 let congratsImgUrl = ""; 
 
 // 慶祝紙花粒子系統
 let confetti = [];
 
-// 🌟 金牌中心插圖
+// 金牌中心插圖
 let medalCenterImg = null;
 let medalCenterImgUrl = "https://i.postimg.cc/hGfMJppk/24.png";
 
@@ -519,7 +519,6 @@ function loadStudentProgress(sName, onlyViewWall = false) {
         if (data.badgeEarned && data.badgeEarned !== "未解鎖") {
           currentUserBadges.push(data.badgeEarned);
         }
-        // 確保以數字型態比較
         let qid = parseInt(data.questionId);
         if (qid > maxQuestionId) {
           maxQuestionId = qid;
@@ -527,32 +526,27 @@ function loadStudentProgress(sName, onlyViewWall = false) {
         }
       });
 
-      // 檢查今天該學生是否已打卡過
       let today = getTodayDateString();
       studentHasDoneToday = (lastAnswerDate === today);
 
-      // 💡 關鍵修正：無論是否只看圖鑑，都要先更新下一題索引！
+      // 正確計算下一題索引
       currentQuestionIndex = maxQuestionId % questionDatabase.length;
-
       isLoadingCloud = false;
 
-      // 如果只是按「查看我的徽章圖鑑」
       if (onlyViewWall) {
         currentScene = SCENE_BADGE_WALL;
         return;
       }
 
-      // 如果 15 題全數完成
       if (maxQuestionId >= questionDatabase.length) {
         currentScene = SCENE_CONGRATS;
         return;
       }
 
-      // 判斷今日打卡限制
       if (studentHasDoneToday) {
-        currentScene = SCENE_ALREADY_DONE; // 該同學今日已做過
+        currentScene = SCENE_ALREADY_DONE;
       } else {
-        currentScene = SCENE_AWARENESS;    // 該同學開始做今天的題目
+        currentScene = SCENE_AWARENESS;
       }
     })
     .catch((err) => {
@@ -567,8 +561,9 @@ function loadStudentProgress(sName, onlyViewWall = false) {
 
 function draw() {
   background(235, 228, 206);
+  cursor(ARROW); // 預設指標
 
-  // 輸入框位置
+  // 輸入框精確定位
   if (nameInput) {
     if (currentScene === SCENE_START && !isLoadingCloud) {
       nameInput.show();
@@ -582,7 +577,7 @@ function draw() {
     }
   }
 
-  // 雲端資料同步中提示
+  // 雲端同步提示
   if (isLoadingCloud) {
     fill(0, 0, 0, 70);
     rect(0, 0, width, height);
@@ -642,7 +637,7 @@ function drawStartScreen() {
   fill(50);
   textSize(15);
   textStyle(BOLD);
-  text("探險家，請輸入你的姓名或座號：", width / 2, 280);
+  text("探險家，請輸入你的姓名或代號：", width / 2, 280);
 
   if (showNameWarning) {
     fill(210, 60, 60);
@@ -919,7 +914,7 @@ function drawBadgeWallScreen() {
     pop();
   }
 
-  // 底部按鈕顯示邏輯（依據該學生是否今日已作答過）
+  // 底部按鈕顯示邏輯
   if (currentUserBadges.length >= questionDatabase.length) {
     drawAutoButton(width / 2 - 210, 445, 190, 42, "返回主畫面", color(193, 209, 196));
     drawAutoButton(width / 2 + 20, 445, 190, 42, "觀看結業大獎牌", color(255, 215, 0));
@@ -932,7 +927,7 @@ function drawBadgeWallScreen() {
   }
 }
 
-// ---------------- 7. 🌟 全通關「情緒小達人」大圖示與結業畫面 ----------------
+// ---------------- 7. 全通關「情緒小達人」大圖示與結業畫面 ----------------
 function drawCongratsScreen() {
   for (let p of confetti) {
     noStroke();
@@ -1069,6 +1064,9 @@ function drawAutoButton(x, y, w, param4, param5, param6) {
   let dynamicH = Math.max(minH, totalLineCount * 22 + 20);
 
   let isHover = mouseX >= x && mouseX <= x + w && mouseY >= y && mouseY <= y + dynamicH;
+  if (isHover) {
+    cursor(HAND); // 滑鼠游標變成手指，提示可點擊
+  }
 
   push();
   stroke(100, 100, 100, 30);
@@ -1088,6 +1086,9 @@ function drawAutoButton(x, y, w, param4, param5, param6) {
 // ---------------- 繪製繪本風格選項卡牌 ----------------
 function drawOptionCard(x, y, w, h, badgeText, contentText, themeColor, cardImg = null) {
   let isHover = mouseX >= x && mouseX <= x + w && mouseY >= y && mouseY <= y + h;
+  if (isHover) {
+    cursor(HAND);
+  }
   let offsetY = isHover ? -4 : 0;
 
   push();
@@ -1165,12 +1166,12 @@ function drawOptionCard(x, y, w, h, badgeText, contentText, themeColor, cardImg 
 
 // ---------------- 滑鼠點擊切換邏輯 ----------------
 function mousePressed() {
-  if (isLoadingCloud) return; // 讀取中禁止點擊
+  if (isLoadingCloud) return;
 
   // 0. 主選單
   if (currentScene === SCENE_START) {
     // 點選「開始試煉 ➜」
-    if (mouseX >= width / 2 - 130 && mouseX <= width / 2 + 130 && mouseY >= 375 && mouseY <= 423) {
+    if (mouseX >= width / 2 - 130 && mouseX <= width / 2 + 130 && mouseY >= 370 && mouseY <= 430) {
       let entered = nameInput ? nameInput.value().trim() : "";
       if (entered === "") {
         showNameWarning = true;
@@ -1179,12 +1180,10 @@ function mousePressed() {
       showNameWarning = false;
       studentName = entered;
       if (nameInput) nameInput.hide();
-
-      // 💡 核心：載入該同學在 Firebase 的進度
       loadStudentProgress(studentName, false);
     }
     // 點選「查看我的徽章圖鑑」
-    if (mouseX >= width / 2 - 100 && mouseX <= width / 2 + 100 && mouseY >= 435 && mouseY <= 473) {
+    if (mouseX >= width / 2 - 100 && mouseX <= width / 2 + 100 && mouseY >= 430 && mouseY <= 480) {
       let entered = nameInput ? nameInput.value().trim() : "";
       if (entered === "") {
         showNameWarning = true;
@@ -1193,8 +1192,6 @@ function mousePressed() {
       showNameWarning = false;
       studentName = entered;
       if (nameInput) nameInput.hide();
-
-      // 💡 載入該同學的圖鑑
       loadStudentProgress(studentName, true);
     }
   } 
@@ -1217,7 +1214,7 @@ function mousePressed() {
   // 2. 深呼吸調節
   else if (currentScene === SCENE_BREATH) {
     if (breathCount >= REQUIRED_BREATHS) {
-      if (mouseX >= width / 2 - 120 && mouseX <= width / 2 + 120 && mouseY >= 420 && mouseY <= 465) {
+      if (mouseX >= width / 2 - 120 && mouseX <= width / 2 + 120 && mouseY >= 415 && mouseY <= 470) {
         currentScene = SCENE_DECISION;
       }
     }
@@ -1257,42 +1254,16 @@ function mousePressed() {
         timestamp: (typeof firebase !== "undefined") ? firebase.firestore.FieldValue.serverTimestamp() : new Date()
       };
       
-      // 寫入 Firebase
-      saveRecordToFirebase(logData);
-      if (answered) {
-      const todayStr = getTodayDateString();
-
-      const logData = {
-        userName: studentName || "匿名冒險家",
-        questionId: q.id,
-        axis: q.axis,
-        title: q.title,
-        date: todayStr,
-        awareness: userAwareness,
-        decision: userDecision,
-        badgeEarned: lastChoiceWasGood ? q.badgeName : "未解鎖",
-        timestamp: (typeof firebase !== "undefined") ? firebase.firestore.FieldValue.serverTimestamp() : new Date()
-      };
-      
       saveRecordToFirebase(logData);
 
       studentHasDoneToday = true;
-
-      // 💡 關鍵修正：答完這題後，將當前題號索引推進到下一題！
       currentQuestionIndex = (currentQuestionIndex + 1) % questionDatabase.length;
-
-      currentScene = SCENE_FEEDBACK;
-    }
-
-      // 標記該學生今日已作答
-      studentHasDoneToday = true;
-
       currentScene = SCENE_FEEDBACK;
     }
   } 
   // 4. 即時回饋（前往徽章圖鑑牆）
   else if (currentScene === SCENE_FEEDBACK) {
-    if (mouseX >= width / 2 - 130 && mouseX <= width / 2 + 130 && mouseY >= 400 && mouseY <= 465) {
+    if (mouseX >= width / 2 - 130 && mouseX <= width / 2 + 130 && mouseY >= 400 && mouseY <= 470) {
       if (currentUserBadges.length >= questionDatabase.length) {
         currentScene = SCENE_CONGRATS;
       } else {
@@ -1302,40 +1273,32 @@ function mousePressed() {
   } 
   // 5. 今日已打卡
   else if (currentScene === SCENE_ALREADY_DONE) {
-    // 點擊「返回主畫面換人」
-    if (mouseX >= width / 2 - 210 && mouseX <= width / 2 - 20 && mouseY >= 360 && mouseY <= 405) {
+    if (mouseX >= width / 2 - 210 && mouseX <= width / 2 - 20 && mouseY >= 355 && mouseY <= 415) {
       currentScene = SCENE_START;
     }
-    // 點擊「查看我的徽章圖鑑」
-    if (mouseX >= width / 2 + 20 && mouseX <= width / 2 + 210 && mouseY >= 360 && mouseY <= 405) {
+    if (mouseX >= width / 2 + 20 && mouseX <= width / 2 + 210 && mouseY >= 355 && mouseY <= 415) {
       currentScene = SCENE_BADGE_WALL;
     }
   } 
   // 6. 徽章圖鑑牆
   else if (currentScene === SCENE_BADGE_WALL) {
-    // 點擊「返回主畫面」 (X: 110 ~ 300, Y: 435 ~ 515)
-    if (mouseX >= width / 2 - 210 && mouseX <= width / 2 - 20 && mouseY >= 435 && mouseY <= 515) {
+    if (mouseX >= width / 2 - 210 && mouseX <= width / 2 - 20 && mouseY >= 440 && mouseY <= 495) {
       currentScene = SCENE_START;
     }
-
-    // 點擊右側按鈕 (X: 340 ~ 530, Y: 435 ~ 515)
-    if (mouseX >= width / 2 + 20 && mouseX <= width / 2 + 210 && mouseY >= 435 && mouseY <= 515) {
+    if (mouseX >= width / 2 + 20 && mouseX <= width / 2 + 210 && mouseY >= 440 && mouseY <= 495) {
       if (currentUserBadges.length >= questionDatabase.length) {
-        currentScene = SCENE_CONGRATS; // 滿 15 題觀看大獎牌
+        currentScene = SCENE_CONGRATS;
       } else if (!studentHasDoneToday) {
-        // 💡 只有當前學生今天還沒作答過時，才允許進入當日題目
         currentScene = SCENE_AWARENESS;
       }
     }
   }
-  // 7. 🌟 結業大獎牌畫面
+  // 7. 全通關大獎牌畫面
   else if (currentScene === SCENE_CONGRATS) {
-    // 點擊「返回徽章圖鑑牆」
-    if (mouseX >= width / 2 - 200 && mouseX <= width / 2 - 15 && mouseY >= 390 && mouseY <= 455) {
+    if (mouseX >= width / 2 - 200 && mouseX <= width / 2 - 15 && mouseY >= 390 && mouseY <= 450) {
       currentScene = SCENE_BADGE_WALL;
     }
-    // 點擊「返回主畫面換人」
-    if (mouseX >= width / 2 + 15 && mouseX <= width / 2 + 200 && mouseY >= 390 && mouseY <= 455) {
+    if (mouseX >= width / 2 + 15 && mouseX <= width / 2 + 200 && mouseY >= 390 && mouseY <= 450) {
       studentName = "";
       currentUserBadges = [];
       studentHasDoneToday = false;
