@@ -15,15 +15,32 @@ if (typeof firebase !== "undefined" && !firebase.apps.length) {
 
 function saveRecordToFirebase(recordData) {
   if (typeof firebase !== "undefined") {
-    const db = firebase.firestore();
-    let studentId = (recordData.userName || "未具名").trim();
-    let qDocId = `Q${recordData.questionId}`;
+    try {
+      const db = firebase.firestore();
+      let studentId = String(recordData.userName || "未具名").trim();
+      if (!studentId) studentId = "未具名";
+      let qDocId = `Q${recordData.questionId}`;
 
-    db.collection("students").doc(studentId)
-      .collection("answers").doc(qDocId)
-      .set(recordData)
-      .then(() => console.log(`成功記錄：【${studentId}】的【${qDocId}】資料！`))
-      .catch((error) => console.error("Firebase 記錄失敗: ", error));
+      let cleanData = {
+        userName: studentId,
+        questionId: Number(recordData.questionId) || 0,
+        axis: String(recordData.axis || ""),
+        title: String(recordData.title || ""),
+        date: String(recordData.date || ""),
+        awareness: String(recordData.awareness || ""),
+        decision: String(recordData.decision || ""),
+        badgeEarned: String(recordData.badgeEarned || "未解鎖"),
+        timestamp: new Date().toISOString()
+      };
+
+      db.collection("students").doc(studentId)
+        .collection("answers").doc(qDocId)
+        .set(cleanData)
+        .then(() => console.log(`成功記錄：【${studentId}】的【${qDocId}】資料！`))
+        .catch((error) => console.error("Firebase 記錄失敗: ", error));
+    } catch (err) {
+      console.warn("Firebase 儲存略過: ", err);
+    }
   }
 }
 
@@ -361,6 +378,9 @@ const SCENE_ALREADY_DONE = 5;// 今日已完成打卡
 const SCENE_BADGE_WALL = 6;  // 徽章圖鑑牆
 const SCENE_CONGRATS = 7;    // 全通關大獎牌畫面
 
+const BASE_W = 640;
+const BASE_H = 550;
+
 let currentScene = SCENE_START;
 let currentQuestionIndex = 0; 
 let totalScore = 0;           
@@ -368,11 +388,11 @@ let lastChoiceWasGood = false;
 
 // 參加者資訊與雲端進度暫存
 let studentName = "";
-let nameInput;
+let nameInput = null;
 let showNameWarning = false;
 let currentUserBadges = [];       
 let studentHasDoneToday = false;  
-let isLoadingCloud = false;       
+let isLoadingCloud = false;
 
 // 答題紀錄暫存
 let userAwareness = "";
@@ -412,7 +432,7 @@ function getTodayDateString() {
 
 // 支援非同步圖片載入
 async function setup() {
-  mainCanvas = createCanvas(640, 550);
+  mainCanvas = createCanvas(BASE_W, BASE_H);
   textAlign(CENTER, CENTER);
   rectMode(CORNER);
 
@@ -420,6 +440,20 @@ async function setup() {
   mainCanvas.style("border-radius", "20px");
   mainCanvas.style("box-shadow", "0 10px 30px rgba(0, 0, 0, 0.12)");
   mainCanvas.style("overflow", "hidden");
+
+  // 💡 建立原生輸入框，完全支援中文與注音選字
+  nameInput = createInput("");
+  nameInput.attribute("placeholder", "請輸入你的姓名或座號");
+  nameInput.size(230, 38);
+  nameInput.style("font-size", "16px");
+  nameInput.style("font-weight", "bold");
+  nameInput.style("text-align", "center");
+  nameInput.style("border-radius", "8px");
+  nameInput.style("border", "2px solid #d4c5a9");
+  nameInput.style("outline", "none");
+  nameInput.style("box-sizing", "border-box");
+  nameInput.style("background-color", "#ffffff");
+  nameInput.style("color", "#333333");
 
   // 初始化紙花
   for (let i = 0; i < 60; i++) {
@@ -432,18 +466,6 @@ async function setup() {
       color: color(random(255), random(200, 255), random(150, 255))
     });
   }
-
-  // 建立輸入框
-  nameInput = createInput("");
-  nameInput.attribute("placeholder", "請輸入你的姓名或座號");
-  nameInput.size(220, 36);
-  nameInput.style("font-size", "16px");
-  nameInput.style("text-align", "center");
-  nameInput.style("border-radius", "8px");
-  nameInput.style("border", "2px solid #d4c5a9");
-  nameInput.style("outline", "none");
-  nameInput.style("box-sizing", "border-box");
-  nameInput.style("background-color", "#ffffff");
 
   // 載入深呼吸圖片
   if (breathImgUrl) {
@@ -529,7 +551,6 @@ function loadStudentProgress(sName, onlyViewWall = false) {
       let today = getTodayDateString();
       studentHasDoneToday = (lastAnswerDate === today);
 
-      // 正確計算下一題索引
       currentQuestionIndex = maxQuestionId % questionDatabase.length;
       isLoadingCloud = false;
 
@@ -561,15 +582,15 @@ function loadStudentProgress(sName, onlyViewWall = false) {
 
 function draw() {
   background(235, 228, 206);
-  cursor(ARROW); // 預設指標
+  cursor(ARROW);
 
-  // 輸入框精確定位
+  // 💡 輸入框精準固定在畫布正中央 (Y: 305)
   if (nameInput) {
     if (currentScene === SCENE_START && !isLoadingCloud) {
       nameInput.show();
       let cvPos = mainCanvas.position();
-      let inputW = 220;
-      let targetX = cvPos.x + (width - inputW) / 2;
+      let inputW = 230;
+      let targetX = cvPos.x + (BASE_W - inputW) / 2;
       let targetY = cvPos.y + 305;
       nameInput.position(targetX, targetY);
     } else {
@@ -577,7 +598,6 @@ function draw() {
     }
   }
 
-  // 雲端同步提示
   if (isLoadingCloud) {
     fill(0, 0, 0, 70);
     rect(0, 0, width, height);
@@ -618,6 +638,7 @@ function draw() {
 
 // ---------------- 0. 主選單畫面 ----------------
 function drawStartScreen() {
+  noStroke();
   fill(239, 177, 135, 100);
   rect(0, 0, width, 160, 20);
   
@@ -642,7 +663,8 @@ function drawStartScreen() {
   if (showNameWarning) {
     fill(210, 60, 60);
     textSize(13);
-    text("⚠️ 請先輸入姓名或座號再開始試煉喔！", width / 2, 355);
+    textAlign(CENTER, CENTER);
+    text("⚠️ 請先輸入姓名或座號再開始試煉喔！", width / 2, 360);
   }
 
   drawAutoButton(width / 2 - 130, 375, 260, 48, "開始試煉 ➜", color(244, 217, 126));
@@ -654,6 +676,7 @@ function drawAwarenessScreen() {
   let q = questionDatabase[currentQuestionIndex];
   drawProgressBar();
 
+  noStroke();
   fill(40);
   textSize(22);
   textStyle(BOLD);
@@ -677,6 +700,7 @@ function drawBreathScreen() {
   let q = questionDatabase[currentQuestionIndex];
   drawProgressBar();
 
+  noStroke();
   fill(40);
   textSize(22);
   textStyle(BOLD);
@@ -727,12 +751,14 @@ function drawBreathScreen() {
 
   rotate(-tiltAngle);
 
+  noStroke();
   fill(60);
   textSize(18);
   textStyle(BOLD);
   text(isInhaling ? "吸~" : "吐~", 0, currentH / 2 + 25);
   pop();
 
+  noStroke();
   fill(80);
   textSize(15);
   textStyle(NORMAL);
@@ -748,6 +774,7 @@ function drawDecisionScreen() {
   let q = questionDatabase[currentQuestionIndex];
   drawProgressBar();
 
+  noStroke();
   fill(40);
   textSize(22);
   textStyle(BOLD);
@@ -773,6 +800,7 @@ function drawFeedbackScreen() {
   drawProgressBar();
 
   if (lastChoiceWasGood) {
+    noStroke();
     fill(40, 140, 70);
     textSize(22);
     textStyle(BOLD);
@@ -804,6 +832,7 @@ function drawFeedbackScreen() {
     textSize(13);
     text(`探險家【${studentName || "同學"}】的紀錄已同步至雲端日記`, width / 2, 330);
   } else {
+    noStroke();
     fill(210, 70, 70);
     textSize(22);
     textStyle(BOLD);
@@ -833,6 +862,7 @@ function drawAlreadyDoneScreen() {
   rect(30, 25, width - 60, 120, 20);
   pop();
 
+  noStroke();
   fill(60);
   textSize(26);
   textStyle(BOLD);
@@ -849,6 +879,7 @@ function drawAlreadyDoneScreen() {
 
 // ---------------- 6. 徽章圖鑑牆 ----------------
 function drawBadgeWallScreen() {
+  noStroke();
   fill(60);
   textSize(22);
   textStyle(BOLD);
@@ -959,63 +990,58 @@ function drawCongratsScreen() {
   text("你已經成功完成全部 15 項試煉，學會傾聽身體、暫停呼吸與善意抉擇！", width / 2, 142);
 
   let medalCenterY = 250;
-  if (congratsImg) {
+  push();
+  translate(width / 2, medalCenterY);
+
+  fill(210, 60, 60);
+  noStroke();
+  triangle(-20, 20, -50, 95, -15, 80);
+  triangle(20, 20, 50, 95, 15, 80);
+
+  fill(255, 215, 0, 60);
+  circle(0, 0, 140);
+
+  fill(255, 205, 50);
+  stroke(215, 150, 20);
+  strokeWeight(4);
+  circle(0, 0, 110);
+
+  fill(255, 225, 90);
+  stroke(230, 175, 40);
+  strokeWeight(2);
+  circle(0, 0, 88);
+
+  if (medalCenterImg) {
+    let maxImgBox = 70;
+    let scaleVal = min(maxImgBox / medalCenterImg.width, maxImgBox / medalCenterImg.height);
+    let drawW = medalCenterImg.width * scaleVal;
+    let drawH = medalCenterImg.height * scaleVal;
+
     imageMode(CENTER);
-    image(congratsImg, width / 2, medalCenterY, 150, 150);
+    image(medalCenterImg, 0, -8, drawW, drawH);
     imageMode(CORNER);
   } else {
-    push();
-    translate(width / 2, medalCenterY);
-
-    fill(210, 60, 60);
-    noStroke();
-    quad(-20, 20, -50, 95, -25, 85, 0, 30);
-    quad(20, 20, 50, 95, 25, 85, 0, 30);
-
-    fill(255, 215, 0, 60);
-    circle(0, 0, 140);
-
-    fill(255, 205, 50);
-    stroke(215, 150, 20);
-    strokeWeight(4);
-    circle(0, 0, 110);
-
-    fill(255, 225, 90);
-    stroke(230, 175, 40);
-    strokeWeight(2);
-    circle(0, 0, 88);
-
-    if (medalCenterImg) {
-      let maxImgBox = 70;
-      let scaleVal = min(maxImgBox / medalCenterImg.width, maxImgBox / medalCenterImg.height);
-      let drawW = medalCenterImg.width * scaleVal;
-      let drawH = medalCenterImg.height * scaleVal;
-
-      imageMode(CENTER);
-      image(medalCenterImg, 0, -8, drawW, drawH);
-      imageMode(CORNER);
-    } else {
-      noStroke();
-      fill(175, 95, 0);
-      textSize(34);
-      text("👑", 0, -8);
-    }
-
     noStroke();
     fill(175, 95, 0);
-    textSize(13);
-    textStyle(BOLD);
-    text("情緒大師", 0, 24);
-    pop();
+    textSize(34);
+    text("👑", 0, -8);
   }
 
+  noStroke();
+  fill(175, 95, 0);
+  textSize(13);
+  textStyle(BOLD);
+  text("情緒大師", 0, 24);
+  pop();
+
+  noStroke();
   fill(60);
   textSize(14);
   textStyle(BOLD);
   text("願這份溫柔、自律與同理的力量，陪伴你在日常中閃閃發光！", width / 2, 355);
 
-  drawAutoButton(width / 2 - 200, 400, 185, 42, "返回徽章圖鑑牆", color(193, 209, 196));
-  drawAutoButton(width / 2 + 15, 400, 185, 42, "返回主畫面換人 ↺", color(244, 217, 126));
+  drawAutoButton(width / 2 - 200, 400, 185, 45, "返回徽章圖鑑牆", color(193, 209, 196));
+  drawAutoButton(width / 2 + 15, 400, 185, 45, "返回主畫面換人 ↺", color(244, 217, 126));
 }
 
 // ---------------- 頂部進度條 ----------------
@@ -1029,7 +1055,7 @@ function drawProgressBar() {
   rect(0, 0, width * progress, 12);
 }
 
-// ---------------- 支援自動換行與高度自適應的按鈕 ----------------
+// ---------------- 💡 確保文字永遠精準置中的按鈕函式 ----------------
 function drawAutoButton(x, y, w, param4, param5, param6) {
   let label = "";
   let btnColor = color(200);
@@ -1045,45 +1071,32 @@ function drawAutoButton(x, y, w, param4, param5, param6) {
     minH = (typeof param6 === "number") ? param6 : 50;
   }
 
-  let fontSize = 14;
-  textSize(fontSize);
-  textLeading(20);
-  textStyle(BOLD);
-
-  let textW = max(20, w - 24);
-  let textLines = label.split('\n');
-  let totalLineCount = 0;
-  
-  for (let i = 0; i < textLines.length; i++) {
-    let singleLine = textLines[i];
-    let lineW = textWidth(singleLine);
-    let estimated = Math.ceil(lineW / textW);
-    totalLineCount += Math.max(1, isFinite(estimated) ? estimated : 1);
-  }
-  
-  let dynamicH = Math.max(minH, totalLineCount * 22 + 20);
-
+  let dynamicH = minH;
   let isHover = mouseX >= x && mouseX <= x + w && mouseY >= y && mouseY <= y + dynamicH;
   if (isHover) {
-    cursor(HAND); // 滑鼠游標變成手指，提示可點擊
+    cursor(HAND);
   }
 
   push();
+  // 1. 畫底框
   stroke(100, 100, 100, 30);
   strokeWeight(1);
   fill(isHover ? lerpColor(btnColor, color(255), 0.3) : btnColor);
   rect(x, y, w, dynamicH, 12);
 
+  // 2. 💡 重設描邊並鎖定中心點，文字 100% 垂直水平置中且不變色
   noStroke();
   fill(40);
+  textSize(15);
+  textStyle(BOLD);
   textAlign(CENTER, CENTER);
-  text(label, x + 12, y + 10, textW, dynamicH - 20);
+  text(label, x + w / 2, y + dynamicH / 2);
   pop();
 
   return dynamicH;
 }
 
-// ---------------- 繪製繪本風格選項卡牌 ----------------
+// ---------------- 繪製選項卡牌 ----------------
 function drawOptionCard(x, y, w, h, badgeText, contentText, themeColor, cardImg = null) {
   let isHover = mouseX >= x && mouseX <= x + w && mouseY >= y && mouseY <= y + h;
   if (isHover) {
@@ -1116,7 +1129,6 @@ function drawOptionCard(x, y, w, h, badgeText, contentText, themeColor, cardImg 
     let drawH = cardImg.height * scaleVal;
 
     let imgCenterY = y + 90;
-    
     imageMode(CENTER);
     image(cardImg, x + w / 2, imgCenterY, drawW, drawH);
     imageMode(CORNER);
@@ -1143,6 +1155,7 @@ function drawOptionCard(x, y, w, h, badgeText, contentText, themeColor, cardImg 
   let textAreaW = w - padX * 2;
   let textAreaH = h - bottomMargin - 60;
 
+  noStroke();
   fill(50);
   textSize(15);
   textLeading(21);
@@ -1164,14 +1177,33 @@ function drawOptionCard(x, y, w, h, badgeText, contentText, themeColor, cardImg 
   pop();
 }
 
-// ---------------- 滑鼠點擊切換邏輯 ----------------
+// ---------------- 點擊事件處理 ----------------
+let lastClickTime = 0;
+
 function mousePressed() {
+  let now = millis();
+  if (now - lastClickTime < 250) return;
+  lastClickTime = now;
+
+  handleInteraction(mouseX, mouseY);
+}
+
+function touchStarted() {
+  let now = millis();
+  if (now - lastClickTime < 250) return false;
+  lastClickTime = now;
+
+  handleInteraction(mouseX, mouseY);
+  return false;
+}
+
+function handleInteraction(ptX, ptY) {
   if (isLoadingCloud) return;
 
   // 0. 主選單
   if (currentScene === SCENE_START) {
     // 點選「開始試煉 ➜」
-    if (mouseX >= width / 2 - 130 && mouseX <= width / 2 + 130 && mouseY >= 370 && mouseY <= 430) {
+    if (ptX >= width / 2 - 130 && ptX <= width / 2 + 130 && ptY >= 370 && ptY <= 430) {
       let entered = nameInput ? nameInput.value().trim() : "";
       if (entered === "") {
         showNameWarning = true;
@@ -1182,8 +1214,9 @@ function mousePressed() {
       if (nameInput) nameInput.hide();
       loadStudentProgress(studentName, false);
     }
+
     // 點選「查看我的徽章圖鑑」
-    if (mouseX >= width / 2 - 100 && mouseX <= width / 2 + 100 && mouseY >= 430 && mouseY <= 480) {
+    if (ptX >= width / 2 - 100 && ptX <= width / 2 + 100 && ptY >= 430 && ptY <= 480) {
       let entered = nameInput ? nameInput.value().trim() : "";
       if (entered === "") {
         showNameWarning = true;
@@ -1198,13 +1231,13 @@ function mousePressed() {
   // 1. 自我覺察 (點選卡牌 A 或 B)
   else if (currentScene === SCENE_AWARENESS) {
     let q = questionDatabase[currentQuestionIndex];
-    if (mouseX >= cardA_X && mouseX <= cardA_X + cardW && mouseY >= cardY && mouseY <= cardY + cardH) {
+    if (ptX >= cardA_X && ptX <= cardA_X + cardW && ptY >= cardY && ptY <= cardY + cardH) {
       userAwareness = q.optA;
       currentScene = SCENE_BREATH;
       breathCount = 0;
       breathTimer = 0;
     }
-    if (mouseX >= cardB_X && mouseX <= cardB_X + cardW && mouseY >= cardY && mouseY <= cardY + cardH) {
+    if (ptX >= cardB_X && ptX <= cardB_X + cardW && ptY >= cardY && ptY <= cardY + cardH) {
       userAwareness = q.optB;
       currentScene = SCENE_BREATH;
       breathCount = 0;
@@ -1214,7 +1247,7 @@ function mousePressed() {
   // 2. 深呼吸調節
   else if (currentScene === SCENE_BREATH) {
     if (breathCount >= REQUIRED_BREATHS) {
-      if (mouseX >= width / 2 - 120 && mouseX <= width / 2 + 120 && mouseY >= 415 && mouseY <= 470) {
+      if (ptX >= width / 2 - 120 && ptX <= width / 2 + 120 && ptY >= 415 && ptY <= 470) {
         currentScene = SCENE_DECISION;
       }
     }
@@ -1224,7 +1257,7 @@ function mousePressed() {
     let q = questionDatabase[currentQuestionIndex];
     let answered = false;
 
-    if (mouseX >= cardA_X && mouseX <= cardA_X + cardW && mouseY >= cardY && mouseY <= cardY + cardH) {
+    if (ptX >= cardA_X && ptX <= cardA_X + cardW && ptY >= cardY && ptY <= cardY + cardH) {
       userDecision = q.actGood;
       lastChoiceWasGood = true;
       totalScore++;
@@ -1233,7 +1266,7 @@ function mousePressed() {
       }
       answered = true;
     }
-    if (mouseX >= cardB_X && mouseX <= cardB_X + cardW && mouseY >= cardY && mouseY <= cardY + cardH) {
+    if (ptX >= cardB_X && ptX <= cardB_X + cardW && ptY >= cardY && ptY <= cardY + cardH) {
       userDecision = q.actBad;
       lastChoiceWasGood = false;
       answered = true;
@@ -1250,8 +1283,7 @@ function mousePressed() {
         date: todayStr,
         awareness: userAwareness,
         decision: userDecision,
-        badgeEarned: lastChoiceWasGood ? q.badgeName : "未解鎖",
-        timestamp: (typeof firebase !== "undefined") ? firebase.firestore.FieldValue.serverTimestamp() : new Date()
+        badgeEarned: lastChoiceWasGood ? q.badgeName : "未解鎖"
       };
       
       saveRecordToFirebase(logData);
@@ -1263,7 +1295,7 @@ function mousePressed() {
   } 
   // 4. 即時回饋（前往徽章圖鑑牆）
   else if (currentScene === SCENE_FEEDBACK) {
-    if (mouseX >= width / 2 - 130 && mouseX <= width / 2 + 130 && mouseY >= 400 && mouseY <= 470) {
+    if (ptX >= width / 2 - 130 && ptX <= width / 2 + 130 && ptY >= 400 && ptY <= 470) {
       if (currentUserBadges.length >= questionDatabase.length) {
         currentScene = SCENE_CONGRATS;
       } else {
@@ -1273,19 +1305,19 @@ function mousePressed() {
   } 
   // 5. 今日已打卡
   else if (currentScene === SCENE_ALREADY_DONE) {
-    if (mouseX >= width / 2 - 210 && mouseX <= width / 2 - 20 && mouseY >= 355 && mouseY <= 415) {
+    if (ptX >= width / 2 - 210 && ptX <= width / 2 - 20 && ptY >= 355 && ptY <= 415) {
       currentScene = SCENE_START;
     }
-    if (mouseX >= width / 2 + 20 && mouseX <= width / 2 + 210 && mouseY >= 355 && mouseY <= 415) {
+    if (ptX >= width / 2 + 20 && ptX <= width / 2 + 210 && ptY >= 355 && ptY <= 415) {
       currentScene = SCENE_BADGE_WALL;
     }
   } 
   // 6. 徽章圖鑑牆
   else if (currentScene === SCENE_BADGE_WALL) {
-    if (mouseX >= width / 2 - 210 && mouseX <= width / 2 - 20 && mouseY >= 440 && mouseY <= 495) {
+    if (ptX >= width / 2 - 210 && ptX <= width / 2 - 20 && ptY >= 440 && ptY <= 495) {
       currentScene = SCENE_START;
     }
-    if (mouseX >= width / 2 + 20 && mouseX <= width / 2 + 210 && mouseY >= 440 && mouseY <= 495) {
+    if (ptX >= width / 2 + 20 && ptX <= width / 2 + 210 && ptY >= 440 && ptY <= 495) {
       if (currentUserBadges.length >= questionDatabase.length) {
         currentScene = SCENE_CONGRATS;
       } else if (!studentHasDoneToday) {
@@ -1295,15 +1327,20 @@ function mousePressed() {
   }
   // 7. 全通關大獎牌畫面
   else if (currentScene === SCENE_CONGRATS) {
-    if (mouseX >= width / 2 - 200 && mouseX <= width / 2 - 15 && mouseY >= 390 && mouseY <= 450) {
+    // 點擊左邊「返回徽章圖鑑牆」
+    if (ptX >= width / 2 - 210 && ptX <= width / 2 - 10 && ptY >= 390 && ptY <= 465) {
       currentScene = SCENE_BADGE_WALL;
+      return;
     }
-    if (mouseX >= width / 2 + 15 && mouseX <= width / 2 + 200 && mouseY >= 390 && mouseY <= 450) {
+    // 點擊右邊「返回主畫面換人 ↺」
+    if (ptX >= width / 2 + 10 && ptX <= width / 2 + 210 && ptY >= 390 && ptY <= 465) {
       studentName = "";
+      if (nameInput) nameInput.value("");
       currentUserBadges = [];
       studentHasDoneToday = false;
       currentQuestionIndex = 0;
       currentScene = SCENE_START;
+      return;
     }
   }
 }
